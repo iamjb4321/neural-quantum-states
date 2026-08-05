@@ -1,4 +1,5 @@
 import tensorflow as tf
+import numpy as np
 from hamiltonians.ising import Ising1D
 from sampler.sampler import MetropolisHastingsSampler
 
@@ -31,7 +32,7 @@ class OptimizerWrapper:
 
         if sampler_params is None:
             sampler_params = {
-                'num_sweeps': 1000,
+                'num_sweeps': 1000, #original 1000
                 'therm_factor': 0.,
                 'sweep_factor': 1,
                 'num_flips': None
@@ -50,14 +51,20 @@ class OptimizerWrapper:
         For a detailed description of the gradient calculation, see 
         https://doi.org/10.1002/adts.202000269
         """
-        nqs_energy = self.sampler.nqs_energy
+        nqs_energy = self.sampler.nqs_energy.numpy() if hasattr(self.sampler.nqs_energy, 'numpy') else self.sampler.nqs_energy
         dpsis = self.sampler.dpsi_over_psi_list
         elocs_times_dpsi = self.sampler.eloc_times_dpsi_list
 
-        gradient = (2/num_sweeps) * (
-            [sum(col) for col in zip(*elocs_times_dpsi)]
-        - nqs_energy.numpy() * [sum(col) for col in zip(*dpsis)]
-        )
+        # Sum components across MC sweep samples for each parameter group
+        sum_eloc_dpsi = [sum(col) for col in zip(*elocs_times_dpsi)]
+        sum_dpsi = [sum(col) for col in zip(*dpsis)]
+
+        # Compute gradient: 2/num_sweeps * ( <E_loc * O_k> - <E_loc> * <O_k> )
+        gradient = [
+            (2.0 / num_sweeps) * (eloc_sum - nqs_energy * dpsi_sum)
+            for eloc_sum, dpsi_sum in zip(sum_eloc_dpsi, sum_dpsi)
+        ]
+        
         return gradient
 
     def run(self, num_epochs):
@@ -71,7 +78,7 @@ class OptimizerWrapper:
                     hamiltonian=self.hamiltonian,
                     nqs=self.nqs,
                     init_state=init_state
-                    )
+                )
                 self.sampler.run(num_sweeps=self.num_sweeps)
                 init_state = self.sampler.current_state
                 weights = self.nqs.trainable_variables
@@ -79,7 +86,5 @@ class OptimizerWrapper:
                 self.optimizer.apply_gradients(zip(grads, weights))
         except KeyboardInterrupt:
             choice = input("\nDo you want to save the model? (y/n)")
-            if choice is 'y':
+            if choice == 'y':
                 self.nqs.save(f'./Saved Models/model-{epoch}_epochs-{self.sampler.nqs_energy:.3f}')
-
-        

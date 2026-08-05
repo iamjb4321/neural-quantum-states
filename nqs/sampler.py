@@ -249,7 +249,10 @@ class Sampler:
         enmeansq /= (nblocks - 1)
         enmeanSqUnblocked /= (nblocks * blocksize - 1)
         estAvg = enmean / self.numSpins
-        estError = math.sqrt(enmeansq / nblocks) / self.numSpins
+        #estError = math.sqrt(enmeansq / nblocks) / self.numSpins #original
+        #estError = np.sqrt(enmeansq / nblocks) / self.numSpins # uses np.sqrt instead
+        estError = math.sqrt((enmeansq / nblocks).item()) / self.numSpins # extracts elemetns from array
+
         self.neuralNetEnergy = np.squeeze(estAvg)
         self.neuralNetEnergyError = np.squeeze(estError)
 

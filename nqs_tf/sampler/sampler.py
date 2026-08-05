@@ -159,7 +159,11 @@ class MetropolisHastingsSampler:
         weights = self.nqs.trainable_variables
         dpsi_over_psi_ = tape.gradient(log_psi, weights)
         self.dpsi_over_psi_list.append(dpsi_over_psi_)
-        self.eloc_times_dpsi_list.append(self.current_eloc.numpy() * dpsi_over_psi_)
+        #self.eloc_times_dpsi_list.append(self.current_eloc.numpy() * dpsi_over_psi_) #orginal
+        # Element-wise multiply the local energy scalar across each parameter gradient tensor in the list
+        eloc_val = self.current_eloc.numpy()
+        eloc_times_dpsi = [eloc_val * item for item in dpsi_over_psi_]
+        self.eloc_times_dpsi_list.append(eloc_times_dpsi)
 
     def find_local_energy(self):
         """ Computes the local energy for a drawn state. """

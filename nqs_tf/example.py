@@ -6,9 +6,11 @@ if __name__ == '__main__':
     import tensorflow as tf
     import numpy as np
     import os
+    import warnings
 
     os.environ['TF_CPP_MIN_LOG_LEVEL']='2'
-    np.warnings.filterwarnings('ignore', category=np.VisibleDeprecationWarning)
+    #np.warnings.filterwarnings('ignore', category=np.VisibleDeprecationWarning)
+    warnings.filterwarnings('ignore')
 
     # Define the neural network state
     ffnn = FFNN()
@@ -23,6 +25,6 @@ if __name__ == '__main__':
     sgd = tf.keras.optimizers.SGD(learning_rate=0.005, momentum=0.2, nesterov=True)
     #adam = tf.keras.optimizers.Adam(learning_rate=0.001, beta_1=0.9, beta_2=0.9, epsilon=1e-8)
     optimizer = OptimizerWrapper(hamiltonian=ham, nqs=ffnn, optimizer=sgd, sampler_params=sampler_params)
-    num_epochs = 250
+    num_epochs = 10 #original 250
     optimizer.run(num_epochs)  
 

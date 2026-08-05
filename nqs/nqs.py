@@ -72,7 +72,11 @@ class NeuralQuantumState:
         '''
         Computes the ratio of two wavefunctions.
         '''
-        return np.exp(self.logAmplitudeRatio(state, flips))
+        #return np.exp(self.logAmplitudeRatio(state, flips)) # original
+
+        # Clip the ratio to prevent overflow in np.exp
+        log_ratio = np.clip(self.logAmplitudeRatio(state, flips), -50.0, 50.0)
+        return np.exp(log_ratio)
 
     def initLookupTables(self, state) -> None:
         '''
