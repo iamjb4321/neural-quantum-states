@@ -24,6 +24,8 @@ def generate_data(L=10, filename='tenpy_dataset.npz'):
     init_state = ["up"] * L
     psi = MPS.from_product_state(model.lat.mps_sites(), init_state, bc=model.lat.bc_MPS)
 
+    psi_copy = psi.copy()
+
     dmrg_params = {'trunc_params': {'chi_max': 30, 'svd_min': 1e-10}, 'verbose': 0}
     dmrg.run(psi, model, dmrg_params)
 
