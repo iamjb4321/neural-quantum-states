@@ -259,7 +259,7 @@ if __name__ == "__main__":
     # We can use the SAME 'params' object to train across all of them!
 
     for i in range(5):
-        h5_file = r"C:\Users\jj9ba\Research\DREU QIS-AI\AI Model\neural-quantum-states\kagome_data\three_site_kagome_"+f"{i:03d}.h5"
+        h5_file = r"C:\Users\jj9ba\Research\DREU QIS-AI\kagome-datasets\kagome-datasets\wavefunctions"+"+f"{i:03d}.h5"
         print(f"\n{'='*65}\nProcessing File: {h5_file}\n{'='*65}")
         
         # Load dataset

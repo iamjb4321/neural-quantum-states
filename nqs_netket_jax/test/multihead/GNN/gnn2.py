@@ -190,6 +190,8 @@ class KagomeGNN_NQS(nn.Module):
         pred_heads = {
             "charge_density": NodePropertyHead(hidden_dim=self.head_dim)(h),
             "spin_corr": BilinearCorrelationHead()(h)
+            #"charge_corr": 
+            #"double_occupancy""
         }
 
         return log_psi, pred_heads
@@ -272,13 +274,10 @@ if __name__ == "__main__":
     opt_state = optimizer.init(params)
 
     # Sequence of HDF5 files representing different state points or lattice sizes
-    data_files = ["three_site_Kagome_Hubbard_296.h5"]
 
-    for h5_file in data_files:
-        if not os.path.exists(h5_file):
-            print(f"Skipping missing file: {h5_file}")
-            continue
+    for i in range(100):
 
+        h5_file = r"C:\Users\jj9ba\Research\DREU QIS-AI\kagome-datasets\kagome-datasets\wavefunctions\three_site_kagome_"+f"{i:03d}.h5"
         print(f"\n{'='*65}\nProcessing File: {h5_file}\n{'='*65}")
 
         # 1. Load Data
@@ -300,4 +299,3 @@ if __name__ == "__main__":
         if "spin_corr" in pred_heads:
             print("\n[Predicted Symmetrized Spin Correlation Matrix (3x3 Block)]:")
             print(np.array2string(pred_heads["spin_corr"][:3, :3], precision=4, suppress_small=True))
-            
