@@ -6,11 +6,23 @@ import jax.numpy as jnp
 import flax.linen as nn
 import optax
 
+# Try importing TeNPy helper for native MPS deserialization
+try:
+    import tenpy.tools.hdf5_io as h5_tenpy
+    from tenpy.algorithms.exact_diag import get_full_wavefunction
+    HAS_TENPY = True
+except ImportError:
+    HAS_TENPY = False
+
+
 # ==========================================
 # 1. KAGOME ADJACENCY MATRIX GENERATOR
 # ==========================================
 def build_kagome_adjacency(Lx: int, Ly: int, periodic: bool = True) -> jnp.ndarray:
-    """Builds the exact 2D Kagome lattice adjacency matrix."""
+    """
+    Builds the exact 2D Kagome lattice adjacency matrix.
+    N = 3 * Lx * Ly total lattice sites across 3-site unit cells (A, B, C).
+    """
     num_unit_cells = Lx * Ly
     num_sites = 3 * num_unit_cells
     adj = np.zeros((num_sites, num_sites), dtype=np.float32)
@@ -36,16 +48,18 @@ def build_kagome_adjacency(Lx: int, Ly: int, periodic: bool = True) -> jnp.ndarr
             B = get_site_index(x, y, 1)
             C = get_site_index(x, y, 2)
 
-            # Intra-unit cell
+            # Intra-unit cell bonds (internal triangle)
             add_edge(A, B)
             add_edge(B, C)
             add_edge(C, A)
 
-            # Inter-unit cell
+            # Inter-unit cell bonds
             B_left = get_site_index(x - 1, y, 1)
             add_edge(A, B_left)
+
             A_down = get_site_index(x, y - 1, 0)
             add_edge(C, A_down)
+
             C_diag = get_site_index(x - 1, y - 1, 2)
             add_edge(B, C_diag)
 
@@ -53,77 +67,46 @@ def build_kagome_adjacency(Lx: int, Ly: int, periodic: bool = True) -> jnp.ndarr
 
 
 # ==========================================
-# 2. HDF5 DATASET LOADER (SURROGATE VERSION)
+# 2. HDF5 DATASET LOADER
 # ==========================================
 def load_kagome_dataset(h5_filepath):
-    print(f"--- Loading Kagome Dataset from '{h5_filepath}' ---")
+    # ... [Keep your HDF5 opening and parameter extraction code] ...
 
-    if not os.path.exists(h5_filepath):
-        raise FileNotFoundError(f"Could not locate file: {h5_filepath}")
+    # 1. Extract Observables (Make sure 'energy' is in your HDF5!)
+    density_true = np.squeeze(get_obs("charge_density"))
+    spin_corr_true = np.squeeze(get_obs("spin_corr"))
+    energy_true = float(f["observables"]["energy"][()]) # Add this! Or wherever energy is stored
 
-    with h5py.File(h5_filepath, "r") as f:
-        p = f["model_params"]
-        Lx = int(p["Lx"][()]) if "Lx" in p else 1
-        Ly = int(p["Ly"][()]) if "Ly" in p else 1
+    num_sites = len(density_true)
+    observables = {
+        "charge_density": density_true,
+        "spin_corr": spin_corr_true,
+        "energy": np.array([energy_true], dtype=np.float32) # Global scalar
+    }
 
-        U = float(p["U"][()]) if "U" in p else 0.0
-        t1 = float(p["t1"][()]) if "t1" in p else 1.0
-        t2 = float(p["t2"][()]) if "t2" in p else 0.0
-        theta_x = float(p["theta_x"][()]) if "theta_x" in p else 0.0
-        theta_y = float(p["theta_y"][()]) if "theta_y" in p else 0.0
+    # 2. Node Features are now the Hamiltonian parameters!
+    # Shape: (num_sites, 5) -> Every node gets [U, t1, t2, theta_x, theta_y]
+    X_data = np.repeat(param_vector[None, :], num_sites, axis=0)
 
-        param_vector = np.array([U, t1, t2, theta_x, theta_y], dtype=np.float32)
-        obs = f["observables"]
-
-        def get_obs(key):
-            if key in obs:
-                return np.array(obs[key], dtype=np.float32)
-            raise KeyError(f"Required observable '{key}' not found in HDF5 file.")
-
-        density_true = np.squeeze(get_obs("charge_density"))
-        spin_corr_true = np.squeeze(get_obs("spin_corr"))
-        
-        # Try to load energy; default to 0.0 if not present for testing
-        if "energy" in f:
-            energy_true = float(f["energy"][()])
-        else:
-            energy_true = 0.0
-
-        num_sites = len(density_true)
-
-        observables = {
-            "charge_density": density_true,
-            "spin_corr": spin_corr_true,
-            "energy": np.array([energy_true], dtype=np.float32)
-        }
-
-    # Surrogate Input: Params + One-Hot Sublattice ID
-    X_params = np.repeat(param_vector[None, :], num_sites, axis=0)
-    
-    # Create one-hot vectors for sublattices A, B, C (0, 1, 2)
-    sublattice_ids = np.eye(3, dtype=np.float32)[np.arange(num_sites) % 3]
-
-    # Surrogate Input: Every node gets the [U, t1, t2, theta_x, theta_y] parameter vector
-    X_data = np.concatenate([X_params, sublattice_ids], axis=1)
-
-    print(f"Loaded successfully! Lattice Sites: {num_sites} | (Lx={Lx}, Ly={Ly})")
     return X_data, observables, param_vector, num_sites, Lx, Ly
 
 
 # ==========================================
-# 3. GNN MODULES (SURROGATE)
+# 3. GNN MODULES (SIZE-AGNOSTIC)
 # ==========================================
 class GCNLayer(nn.Module):
+    """Message passing layer aggregating node representations over the Kagome graph."""
     features: int
 
     @nn.compact
     def __call__(self, node_feats, adj_matrix):
         x = nn.Dense(self.features)(node_feats)
-        x = jnp.matmul(adj_matrix, x)
+        x = jnp.matmul(adj_matrix, x)  # Neighbor aggregation
         return nn.tanh(x)
 
 
 class NodePropertyHead(nn.Module):
+    """Shared per-node MLP predicting 1D site vector properties (e.g. charge density)."""
     hidden_dim: int = 64
 
     @nn.compact
@@ -135,91 +118,103 @@ class NodePropertyHead(nn.Module):
 
 
 class BilinearCorrelationHead(nn.Module):
+    """Size-agnostic head generating symmetric N x N correlation matrices."""
     @nn.compact
     def __call__(self, node_feats):
         feat_dim = node_feats.shape[-1]
         W = self.param('W', nn.initializers.normal(stddev=0.1), (feat_dim, feat_dim))
+        
+        # Tensor contraction H * W * H^T
         raw_corr = jnp.einsum('bni,ij,bmj->bnm', node_feats, W, node_feats)
+        
+        # Enforce C_ij = C_ji
         return 0.5 * (raw_corr + jnp.swapaxes(raw_corr, 1, 2))
 
 
-class GlobalPropertyHead(nn.Module):
-    """Pools graph features to predict a single macroscopic scalar (e.g., Energy)."""
-    hidden_dim: int = 64
-
-    @nn.compact
-    def __call__(self, node_feats):
-        global_feat = jnp.mean(node_feats, axis=1) 
-        x = nn.Dense(self.hidden_dim)(global_feat)
-        x = nn.tanh(x)
-        x = nn.Dense(1)(x)
-        return jnp.squeeze(x, axis=-1)
-
-
-class KagomeGNN_Surrogate(nn.Module):
-    """Parameter-to-Observable Surrogate Model."""
+class KagomeGNN_NQS(nn.Module):
+    """Unified size-agnostic GNN architecture."""
     hidden_dim: int = 128
     head_dim: int = 64
 
     @nn.compact
     def __call__(self, x_input, adj_matrix):
-        # x_input shape: (batch, num_sites, 5)
-        h = GCNLayer(self.hidden_dim)(x_input, adj_matrix)
+        node_feats = jnp.expand_dims(x_input, axis=-1)
+        
+        # Message passing trunk
+        h = GCNLayer(self.hidden_dim)(node_feats, adj_matrix)
         h = GCNLayer(self.hidden_dim)(h, adj_matrix)
 
+        # Head 0: Quantum State Amplitudes log|psi|
+        h_global = jnp.mean(h, axis=1)
+        log_psi = jnp.squeeze(nn.Dense(1)(h_global), axis=-1)
+
+        # Observable Prediction Heads
         pred_heads = {
             "charge_density": NodePropertyHead(hidden_dim=self.head_dim)(h),
-            "spin_corr": BilinearCorrelationHead()(h),
-            "energy": GlobalPropertyHead(hidden_dim=self.head_dim)(h)
+            "spin_corr": BilinearCorrelationHead()(h)
+            #"charge_corr": 
+            #"double_occupancy""
         }
 
-        return pred_heads
+        return log_psi, pred_heads
 
 
 # ==========================================
-# 4. TRAINING LOOP (SURROGATE)
+# 4. TRAINING LOOP
 # ==========================================
-def train_kagome_surrogate(X_data, A_data, observables_true, params, opt_state, optimizer, model, num_epochs=600):
-    print("--- Training Surrogate Parameter-to-Observable GNN ---")
+def train_kagome_nqs(
+    X_data, A_data, y_psi, observables_true, params, opt_state, optimizer, model, num_epochs=1500, w_psi=1.0
+):
+    print("--- Training Size-Agnostic GNN NQS ---")
 
-    # The inputs are ALREADY batched from the __main__ block loop now!
-    # No need to add [None, ...] manually anymore.
-    targets_jax = {k: jnp.array(v) for k, v in observables_true.items()}
+    targets_jax = {k: jnp.array(v)[None, ...] for k, v in observables_true.items()}
     X_inputs = jnp.array(X_data)
-    A_inputs = jnp.array(A_data)
+    A_inputs = jnp.repeat(A_data[None, ...], X_inputs.shape[0], axis=0)
+    y_targets = jnp.array(y_psi) if y_psi is not None else None
 
     @jax.jit
-    def loss_fn(params, x_batch, adj_batch):
-        pred_heads = model.apply({"params": params}, x_batch, adj_batch)
+    def loss_fn(params, x_batch, adj_batch, y_batch):
+        log_psi, pred_heads = model.apply({"params": params}, x_batch, adj_batch)
 
+        # Overlap Loss
+        if y_batch is not None:
+            log_psi_shifted = log_psi - jnp.max(log_psi)
+            psi = jnp.exp(log_psi_shifted)
+            overlap = jnp.dot(psi, y_batch)
+            norm_model = jnp.linalg.norm(psi)
+            norm_true = jnp.linalg.norm(y_batch)
+            loss_psi = 1.0 - ((overlap**2) / (norm_model**2 * norm_true**2 + 1e-12))
+        else:
+            loss_psi = 0.0
+
+        # Physical Properties MSE Loss
         total_obs_loss = 0.0
         head_losses = {}
         for name, target in targets_jax.items():
-            # Standard MSE
             l_head = jnp.mean((pred_heads[name] - target) ** 2)
             head_losses[name] = l_head
-            total_obs_loss += l_head
+            total_obs_loss += 0.5 * l_head
 
-        return total_obs_loss, (head_losses, pred_heads)
+        total_loss = w_psi * loss_psi + total_obs_loss
+        return total_loss, (loss_psi, head_losses, pred_heads)
 
     @jax.jit
-    def train_step(params, opt_state, x_batch, adj_batch):
+    def train_step(params, opt_state, x_batch, adj_batch, y_batch):
         (total_loss, aux), grads = jax.value_and_grad(loss_fn, has_aux=True)(
-            params, x_batch, adj_batch
+            params, x_batch, adj_batch, y_batch
         )
         updates, new_opt_state = optimizer.update(grads, opt_state)
         new_params = optax.apply_updates(params, updates)
         return new_params, new_opt_state, total_loss, aux
 
     for epoch in range(num_epochs):
-        params, opt_state, total_loss, aux = train_step(params, opt_state, X_inputs, A_inputs)
-        head_losses, pred_heads = aux
+        params, opt_state, total_loss, aux = train_step(params, opt_state, X_inputs, A_inputs, y_targets)
+        loss_psi, head_losses, pred_heads = aux
 
         if (epoch + 1) % 150 == 0:
-            loss_str = " | ".join([f"{k[:6]}: {float(v):.2e}" for k, v in head_losses.items()])
-            print(f"Epoch {epoch+1:4d} | Total Loss: {float(total_loss):.6f} | {loss_str}")
+            loss_str = " | ".join([f"{k[:6]}: {v:.2e}" for k, v in head_losses.items()])
+            print(f"Epoch {epoch+1:4d} | Total Loss: {total_loss:.6f} | {loss_str}")
 
-    # Extract the first item from the batch just for printing at the end
     pred_heads_squeezed = {k: np.array(v[0]) for k, v in pred_heads.items()}
     return params, opt_state, pred_heads_squeezed, head_losses
 
@@ -227,43 +222,12 @@ def train_kagome_surrogate(X_data, A_data, observables_true, params, opt_state, 
 # ==========================================
 # 5. ENTRY POINT
 # ==========================================
-# ==========================================
-# 5. ENTRY POINT
-# ==========================================
 if __name__ == "__main__":
-    # 1. ACCUMULATE ALL DATA FOR BATCHING
-    print("Gathering dataset...")
-    all_X, all_A = [], []
-    all_obs = {"charge_density": [], "spin_corr": [], "energy": []}
-
-    # Loop through and load all files into lists first
-    for i in range(100):
-        h5_file = r"C:\Users\jj9ba\Research\DREU QIS-AI\kagome-datasets\kagome-datasets\wavefunctions\three_site_kagome_"+f"{i:03d}.h5"
-        try:
-            X_data, obs_true, param_vec, num_sites, Lx, Ly = load_kagome_dataset(h5_file)
-            A_data = build_kagome_adjacency(Lx=Lx, Ly=Ly, periodic=True)
-
-            all_X.append(X_data)
-            all_A.append(A_data)
-            for k in all_obs.keys():
-                all_obs[k].append(obs_true[k])
-        except FileNotFoundError:
-            continue
-
-    # Stack the lists into 3D batch arrays: Shape -> (batch_size, num_nodes, features)
-    batch_X = np.stack(all_X, axis=0)
-    batch_A = np.stack(all_A, axis=0)
-    batch_obs = {k: np.stack(v, axis=0) for k, v in all_obs.items()}
-
-    print(f"\nDataset batched! Total files loaded: {batch_X.shape[0]}")
-    print(f"Batched Input Shape: {batch_X.shape} -> (Batch, Nodes, Features)\n")
-
-    # 2. INITIALIZE MODEL
-    model = KagomeGNN_Surrogate(hidden_dim=128, head_dim=64)
+    model = KagomeGNN_NQS(hidden_dim=128, head_dim=64)
     rng = jax.random.PRNGKey(42)
 
-    # Dummy inputs must be 3D to match the batched shape
-    dummy_x = jnp.ones((1, 3, 8)) 
+    # Initialize GNN weights using a standard 3-site dummy graph
+    dummy_x = jnp.ones((1, 3))
     dummy_a = jnp.ones((1, 3, 3))
     params = model.init(rng, dummy_x, dummy_a)["params"]
 
@@ -271,20 +235,29 @@ if __name__ == "__main__":
     optimizer = optax.adam(learning_rate=schedule)
     opt_state = optimizer.init(params)
 
-    # 3. TRAIN ON THE WHOLE DATASET AT ONCE
-    # Note: We pass batch_X and batch_A here, NOT single X_data
-    params, opt_state, pred_heads, head_losses = train_kagome_surrogate(
-        batch_X, batch_A, batch_obs, params, opt_state, optimizer, model, num_epochs=1500
-    )
+    # Sequence of HDF5 files representing different state points or lattice sizes
 
-    # 4. DISPLAY RESULTS
-    print("\n[Final Mean Squared Errors (Averaged across all files)]:")
-    for k, v in head_losses.items():
-        print(f"  - Head '{k}': MSE = {float(v):.4e}")
+    for i in range(100):
 
-    if "spin_corr" in pred_heads:
-        print("\n[Predicted Symmetrized Spin Correlation Matrix (First file, 3x3 Block)]:")
-        print(np.array2string(pred_heads["spin_corr"][:3, :3], precision=4, suppress_small=True))
+        h5_file = r"C:\Users\jj9ba\Research\DREU QIS-AI\kagome-datasets\kagome-datasets\wavefunctions\three_site_kagome_"+f"{i:03d}.h5"
+        print(f"\n{'='*65}\nProcessing File: {h5_file}\n{'='*65}")
 
-    if "energy" in pred_heads:
-        print(f"\n[Predicted Energy (First file)]: {float(pred_heads['energy']):.6f}")
+        # 1. Load Data
+        X_data, y_psi, observables_true, param_vector, num_sites, Lx, Ly = load_kagome_dataset(h5_file)
+
+        # 2. Build Exact 2D Kagome Adjacency Matrix
+        A_data = build_kagome_adjacency(Lx=Lx, Ly=Ly, periodic=True)
+
+        # 3. Train/Transfer Model Weights Across Datasets
+        params, opt_state, pred_heads, head_losses = train_kagome_nqs(
+            X_data, A_data, y_psi, observables_true, params, opt_state, optimizer, model, num_epochs=600
+        )
+
+        # 4. Display Results
+        print("\n[Final Mean Squared Errors]:")
+        for k, v in head_losses.items():
+            print(f"  - Head '{k}': MSE = {float(v):.4e}")
+
+        if "spin_corr" in pred_heads:
+            print("\n[Predicted Symmetrized Spin Correlation Matrix (3x3 Block)]:")
+            print(np.array2string(pred_heads["spin_corr"][:3, :3], precision=4, suppress_small=True))
