@@ -355,13 +355,21 @@ if __name__ == "__main__":
         file_idx = loaded_files[i]
         print(f"--- File three_site_kagome_{file_idx:03d}.h5 ---")
         
-        for k in ["energy", "charge_density", "double_occupancy"]:
-            v_true = float(np.asarray(batch_obs[k][i]).flatten()[0])
-            v_pred = float(np.asarray(pred_heads[k][i]).flatten()[0])
+        for k in ["charge_density", "double_occupancy"]:
+            
+            v_true = float(np.asarray(batch_obs[k][i]).flatten())
+            v_pred = float(np.asarray(pred_heads[k][i]).flatten())
             
             label = f"  {k.replace('_', ' ').title()}:".ljust(22)
-            print(f"{label} True = {v_true:8.4f} | Pred = {v_pred:8.4f}")
+            print(f"{label} True = {v_true:8.4f}  | Pred = {v_pred:8.4f}")
+
+        k = "energy"
+        v_true = float(np.asarray(batch_obs["energy"][i]).flatten()[0])
+        v_pred = float(np.asarray(pred_heads["energy"][i]).flatten()[0])
+
         
+        label = f"  {k.replace('_', ' ').title()}:".ljust(22)
+        print(f"{label} True = {v_true:8.4f}  | Pred = {v_pred:8.4f}")
         print("  Spin Corr Matrix [Row 0] (True):  " + " ".join([f"{val:6.3f}" for val in batch_obs['spin_corr'][i][0][:5]]))
         print("  Spin Corr Matrix [Row 0] (Pred):  " + " ".join([f"{val:6.3f}" for val in pred_heads['spin_corr'][i][0][:5]]))
         print("  Charge Corr Matrix [R0] (True):   " + " ".join([f"{val:6.3f}" for val in batch_obs['charge_corr'][i][0][:5]]))
