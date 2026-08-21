@@ -338,8 +338,8 @@ if __name__ == "__main__":
 
     # Train
     params, opt_state, pred_heads_norm, head_losses = train_kagome_surrogate(
-        batch_X_norm, batch_A, batch_Nsites, batch_obs_norm, params, opt_state, optimizer, model, num_epochs=1500
-    )
+        batch_X_norm, batch_A, batch_Nsites, batch_obs, params, opt_state, optimizer, model, num_epochs=1500
+    ) # changed batch_obs_norm -----> batch_obs
 
     # Un-normalize Predictions
     pred_heads = {}
@@ -356,16 +356,24 @@ if __name__ == "__main__":
         print(f"--- File three_site_kagome_{file_idx:03d}.h5 ---")
         
         for k in ["charge_density", "double_occupancy"]:
-            
-            v_true = float(np.asarray(batch_obs[k][i]).flatten())
-            v_pred = float(np.asarray(pred_heads[k][i]).flatten())
+
+            v_true = np.asarray(batch_obs[k][i]).flatten()
+            v_pred = np.asarray(pred_heads[k][i]).flatten()
             
             label = f"  {k.replace('_', ' ').title()}:".ljust(22)
-            print(f"{label} True = {v_true:8.4f}  | Pred = {v_pred:8.4f}")
+            formatted_string = f"{label} True = {', '.join(f'{x:8.2f}' for x in v_true)} | Pred = {', '.join(f'{x:8.2f}' for x in v_pred)}"
+            print(formatted_string)
 
         k = "energy"
         v_true = float(np.asarray(batch_obs["energy"][i]).flatten()[0])
         v_pred = float(np.asarray(pred_heads["energy"][i]).flatten()[0])
+
+        # Formatting a list of floats to 2 decimal places 
+        # numbers = [1.2345, 6.7891, 0.5555] 
+        # formatted_string = f"My list: {', '.join(f'{x:.2f}' for x in numbers)}" 
+        # print(formatted_string) 
+        # # Output: My list: 1.23, 6.79, 0.56
+
 
         
         label = f"  {k.replace('_', ' ').title()}:".ljust(22)

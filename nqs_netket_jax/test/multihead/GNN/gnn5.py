@@ -301,7 +301,7 @@ if __name__ == "__main__":
     # 3. TRAIN ON THE NORMALIZED DATASET
     # Notice we pass batch_X_norm and batch_obs_norm here
     params, opt_state, pred_heads_norm, head_losses = train_kagome_surrogate(
-        batch_X_norm, batch_A, batch_obs_norm, params, opt_state, optimizer, model, num_epochs=1500
+        batch_X_norm, batch_A, batch_obs_norm, params, opt_state, optimizer, model, num_epochs=150
     )
 
   
