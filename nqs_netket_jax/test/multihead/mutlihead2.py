@@ -285,7 +285,7 @@ def display_results(observables_true, pred_heads, head_losses, num_sites):
 # 5. ENTRY POINT
 # ==========================================
 if __name__ == "__main__":
-    h5_file = r"C:\Users\jj9ba\Research\DREU QIS-AI\AI Model\neural-quantum-states\three_site_Kagome_Hubbard_296.h5"
+    h5_file = r"C:\Users\jj9ba\Research\DREU QIS-AI\AI Model\neural-quantum-states\kagome_data\three_site_kagome_000.h5"
 
     # Step 1: Load Dataset and Observables
     X_data, y_psi, observables_true, param_vector, num_sites = load_kagome_dataset(h5_file)

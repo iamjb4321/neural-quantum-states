@@ -191,17 +191,18 @@ if __name__ == "__main__":
     print("Gathering dataset...")
     all_X, all_S, all_R, all_obs, loaded_files = [], [], [], {"charge_density": [], "spin_corr": [], "energy": []}, []
 
-    for i in range(100):
-        h5_file = r"C:\Users\jj9ba\Research\DREU QIS-AI\kagome-datasets\kagome-datasets\wavefunctions\three_site_kagome_"+f"{i:03d}.h5"
-        try:
-            X_data, obs_true, num_sites, Lx, Ly = load_kagome_dataset(h5_file)
-            S_data, R_data = build_kagome_edges(Lx=Lx, Ly=Ly, periodic=True)
+    for j in range(3):
+        for i in range(100):
+            h5_file = r"C:\Users\jj9ba\Research\DREU QIS-AI\kagome-datasets\kagome-datasets\wavefunctions\three_site_kagome_"+f"{i:03d}.h5"
+            try:
+                X_data, obs_true, num_sites, Lx, Ly = load_kagome_dataset(h5_file)
+                S_data, R_data = build_kagome_edges(Lx=Lx, Ly=Ly, periodic=True)
 
-            all_X.append(X_data); all_S.append(S_data); all_R.append(R_data)
-            for k in all_obs: all_obs[k].append(obs_true[k])
-            loaded_files.append(i)
-        except FileNotFoundError:
-            continue
+                all_X.append(X_data); all_S.append(S_data); all_R.append(R_data)
+                for k in all_obs: all_obs[k].append(obs_true[k])
+                loaded_files.append(i)
+            except FileNotFoundError:
+                continue
 
     batch_X = jnp.array(all_X)
     batch_S = jnp.array(all_S)

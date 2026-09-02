@@ -6,6 +6,7 @@ import jax.numpy as jnp
 import flax.linen as nn
 import optax
 
+
 # ==========================================
 # 1. KAGOME ADJACENCY MATRIX GENERATOR
 # ==========================================
@@ -242,19 +243,20 @@ if __name__ == "__main__":
     all_obs = {"charge_density": [], "spin_corr": [], "energy": []}
     loaded_files = [] 
 
-    for i in range(100):
-        h5_file = r"C:\Users\jj9ba\Research\DREU QIS-AI\kagome-datasets\kagome-datasets\wavefunctions\three_site_kagome_"+f"{i:03d}.h5"
-        try:
-            X_data, obs_true, param_vec, num_sites, Lx, Ly = load_kagome_dataset(h5_file)
-            A_data = build_kagome_adjacency(Lx=Lx, Ly=Ly, periodic=True)
+    for j in range(10):
+        for i in range(100):
+            h5_file = r"C:\Users\jj9ba\Research\DREU QIS-AI\kagome-datasets\kagome-datasets\wavefunctions\three_site_kagome_"+f"{i:03d}.h5"
+            try:
+                X_data, obs_true, param_vec, num_sites, Lx, Ly = load_kagome_dataset(h5_file)
+                A_data = build_kagome_adjacency(Lx=Lx, Ly=Ly, periodic=True)
 
-            all_X.append(X_data)
-            all_A.append(A_data)
-            for k in all_obs.keys():
-                all_obs[k].append(obs_true[k])
-            loaded_files.append(i)
-        except FileNotFoundError:
-            continue
+                all_X.append(X_data)
+                all_A.append(A_data)
+                for k in all_obs.keys():
+                    all_obs[k].append(obs_true[k])
+                loaded_files.append(i)
+            except FileNotFoundError:
+                continue
 
     batch_X = np.stack(all_X, axis=0)
     batch_A = np.stack(all_A, axis=0)
@@ -294,14 +296,14 @@ if __name__ == "__main__":
     dummy_a = jnp.ones((1, 3, 3))
     params = model.init(rng, dummy_x, dummy_a)["params"]
 
-    schedule = optax.cosine_decay_schedule(init_value=1e-3, decay_steps=1500, alpha=0.01)
+    schedule = optax.cosine_decay_schedule(init_value=1e-3, decay_steps=80000, alpha=0.01)
     optimizer = optax.adam(learning_rate=schedule)
     opt_state = optimizer.init(params)
 
     # 3. TRAIN ON THE NORMALIZED DATASET
     # Notice we pass batch_X_norm and batch_obs_norm here
     params, opt_state, pred_heads_norm, head_losses = train_kagome_surrogate(
-        batch_X_norm, batch_A, batch_obs_norm, params, opt_state, optimizer, model, num_epochs=150
+        batch_X_norm, batch_A, batch_obs_norm, params, opt_state, optimizer, model, num_epochs=60
     )
 
   
