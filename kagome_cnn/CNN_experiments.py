@@ -728,7 +728,9 @@ def compute_kagome_observables(ground_state: np.ndarray, num_sites: int, site_po
         S_z_i = 0.5 * (n_up[i] - n_dn[i])
         for j in range(num_sites):
             S_z_j = 0.5 * (n_up[j] - n_dn[j])
-            S_ij = (S_z_i @ S_z_j) + 0.5 * (S_plus[i] @ S_minus[j] + S_minus[i] @ S_plus[j])
+            #S_ij = (S_z_i @ S_z_j) + 0.5 * (S_plus[i] @ S_minus[j] + S_minus[i] @ S_plus[j])
+            S_ij = 3.0 * (S_z_i @ S_z_j)  # Isotropic multiplier for spin singlet
+
             spin_corr[i,j] = np.real(np.vdot(ground_state, S_ij.dot(ground_state)))
     '''
     for i in range(num_sites):

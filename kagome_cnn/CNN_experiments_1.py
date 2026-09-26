@@ -46,6 +46,7 @@ Requires: numpy, torch.   Run:  python kagome_cnn.py
 
 import numpy as np
 import time
+import h5py
 
 try:
     import torch
@@ -262,7 +263,7 @@ if HAVE_TORCH:
             Cij = self.pair(feat).squeeze(-1)             # (B, N, N)
             Cij = 0.5 * (Cij + Cij.transpose(1, 2))       # symmetry: C_ij = C_ji
 
-            # ---- HARD-WIRED PHYSICS ----
+            # # ---- HARD-WIRED PHYSICS ----
             n_flat = n_i.permute(0, 2, 3, 1).reshape(B, N)
             d_flat = d_i.permute(0, 2, 3, 1).reshape(B, N)
             diag = 0.75 * (n_flat - 2 * d_flat)           # exact on-site identity
@@ -270,6 +271,8 @@ if HAVE_TORCH:
             Cij = Cij + torch.diag_embed(diag)
 
             return dict(n=n_flat, d=d_flat, C=Cij)
+            #return dict(n=n_i, d=d_i, C=Cij)
+
 
 
     # =========================================================================
@@ -782,6 +785,18 @@ def compute_kagome_observables(ground_state: np.ndarray, num_sites: int, site_po
         "q_vectors": q_vectors
     }
 
+def make_dataset_from_folder(filepath, n_samples):
+    data = []
+    for i in range(n_samples):
+        run_id = f"{i:03d}"
+        h5_filepath = filepath + f"twelve_site_kagome_{run_id}.h5"
+        with h5py.File(h5_filepath, 'r+') as f_h5:
+            data_dict = {}
+            for key in list(f_h5.keys()):
+                data_dict[key] = f_h5[key][()]
+
+        data.append(data_dict)
+    return data
 
 
 # =============================================================================
@@ -809,9 +824,24 @@ if __name__ == "__main__":
     print("=" * 72)
     
     # Generate exactly ONE datapoint for the overfitting test
-    train = make_dataset(L, 1, rng) 
-    sample = train[0]
+    # train = make_dataset(L, 1, rng) 
+    # sample = train[0]
+
+
+
+
+    # Generate exactly ONE datapoint for the overfitting test
+    #train = make_dataset(L, 1, rng) 
+    #sample = train[0]
+
+    n_samples = 1
+    h5_path = f""
+    train = make_dataset_from_folder(h5_path, n_samples)
+    sample = train[0] 
+
+
     
+
     # We will test on the identical point to set our target threshold
     b0 = baseline_global_mean(train, train)
     b1 = baseline_mean_matrix(train, train)
@@ -854,7 +884,7 @@ if __name__ == "__main__":
         optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
         
         # 3. Training Loop
-        epochs = 600
+        epochs = 1200
         print(f"Training for {epochs} epochs on a single datapoint...")
         
         for ep in range(epochs):
@@ -870,10 +900,14 @@ if __name__ == "__main__":
             # Backward pass
             loss.backward()
             optimizer.step()
-            
+
             if (ep + 1) % 50 == 0 or ep == 0:
                 print(f"  Epoch {ep+1:03d}/{epochs} | MSE Loss: {loss.item():.6f}")
 
+        # Save only the state dictionary (conventionally .pth or .pt)
+        torch.save(model.state_dict(), "model_weights.pth")
+
+        print(f"pred_C: {pred_C}" + "target_C: {target_C}")
         print("-" * 72)
         final_mse = loss.item()
         print(f"Final Model MSE  : {final_mse:.6f}")
