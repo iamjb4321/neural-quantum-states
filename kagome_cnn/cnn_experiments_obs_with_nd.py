@@ -980,12 +980,12 @@ if __name__ == "__main__":
             target_d = torch.tensor(sample["d"], dtype=torch.float32).unsqueeze(0)
             #target_K = torch.tensor(sample["K"], dtype=torch.float32).unsqueeze(0)
             
-            #mean and std
-            C_mean, C_std = target_C.mean(), target_C.std()
-            n_mean, n_std = target_n.mean(), target_n.std()
-            d_mean, d_std = target_d.mean(), target_d.std()
+            # #mean and std
+            # C_mean, C_std = target_C.mean(), target_C.std()
+            # n_mean, n_std = target_n.mean(), target_n.std()
+            # d_mean, d_std = target_d.mean(), target_d.std()
 
-            print(f"std_n: {n_std}\n std: {d_std}")
+            # print(f"std_n: {n_std}\n std: {d_std}")
 
             for ep in range(epochs):
                 optimizer.zero_grad()
@@ -1003,14 +1003,14 @@ if __name__ == "__main__":
                 assert pred_d.shape == target_d.shape
 
 
-                norm_pred_C = (pred_C - C_mean) / C_std
-                norm_target_C = (target_C - C_mean) / C_std
+                # norm_pred_C = (pred_C - C_mean) / C_std
+                # norm_target_C = (target_C - C_mean) / C_std
 
-                norm_pred_n = (pred_n - n_mean) / n_std
-                norm_target_n = (target_n - n_mean) / n_std
+                # norm_pred_n = (pred_n - n_mean) / n_std
+                # norm_target_n = (target_n - n_mean) / n_std
 
-                norm_pred_d = (pred_d - d_mean) / d_std
-                norm_target_d = (target_d - d_mean) / d_std
+                # norm_pred_d = (pred_d - d_mean) / d_std
+                # norm_target_d = (target_d - d_mean) / d_std
 
 
                 # --- ADDED: Combined Loss for Correlators and Kinetic Terms ---
@@ -1031,14 +1031,14 @@ if __name__ == "__main__":
                 # loss = loss_C + loss_n + loss_d  #+ loss_K   
 
                 #mutlitaskloss 
-                #loss = mtl([loss_C, loss_d, loss_n])
+                loss = mtl([loss_C, loss_d, loss_n])
 
-                if epochs < 200:
-                    loss = loss_C
-                elif epochs < 400:
-                    loss = loss_d
-                else:
-                    loss = loss_n
+                # if epochs < 200:
+                #     loss = loss_C
+                # elif epochs < 400:
+                #     loss = loss_d
+                # else:
+                #     loss = loss_n
 
                 # test for loss: heavily weighting C's loss 
                 #loss = (10.0 * loss_C) + (1.0 * loss_d) + (1.0 * loss_n)
